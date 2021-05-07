@@ -1,66 +1,31 @@
-use std::process::Command;
-use std::env;
+use std::path::Path;
 use dotenv::dotenv;
+use s3::bucket::Bucket;
+use s3::creds::Credentials;
+use tokio::fs::File;
+mod stream_spliiter;
 
-fn main() {
+async fn upload_chunk(chunk_path: &str) {
+  let file_name = Path::new(&chunk_path).file_name().unwrap();
+  let file_name = file_name.to_str().unwrap();
+  let creds = Credentials::new(None, None, None, None, None).unwrap();
+  let bucket = Bucket::new("isy-chunks", "eu-north-1".parse().unwrap(), creds).unwrap();
+
+  let mut file = File::open(&chunk_path).await.unwrap();
+  
+  let status_code = bucket.put_object_stream(&mut file, &file_name).await.unwrap();
+  println!("{}", status_code);
+}
+
+#[tokio::main]
+async fn main() {
   #[derive(Debug)]
   struct Square(i32);
 
   dotenv().ok();
 
-  let cam_username = env::var("CAM_USERNAME").unwrap();
-  let cam_pass = env::var("CAM_PASS").unwrap();
-  let cam_ip = env::var("CAM_IP").unwrap();
-  let cam_rtsp_port = env::var("CAM_RTSP_PORT").unwrap();
+  stream_spliiter::split_into_chunks().await;
 
-  let url = format!(
-    "rtsp://{}:{}@{}:{}/ISAPI/Streaming/Channels/101",
-    cam_username,
-    cam_pass,
-    cam_ip,
-    cam_rtsp_port
-  );
-  let cwd = std::env::current_dir().unwrap();
-  let out_path = [cwd.to_str().unwrap(), "chunks", "%03d.mp4"].join("/");
-
-  println!("{}", out_path);
-
-  let cmd = Command::new("ffmpeg")
-    .args(&[
-      // Транспорт
-      "-rtsp_transport",
-      "tcp",
-      // Откуда брать поток
-      "-i",
-      &url,
-      // As an input option, blocks all audio streams of a file from being filtered or being automatically selected or mapped for any output
-      "-an",
-      "-c",
-      "copy",
-      "-map",
-      "0",
-      "-f",
-      // Сегменты по 5 минут
-      "segment",
-      "-segment_time",
-      "5",
-      // Чтобы корректно записывались сегменты
-      "-reset_timestamps",
-      "1",
-      // Формат
-      "-segment_format",
-      "mp4",
-      // Размер буффера
-      "-bufsize",
-      "64k",
-      // Куда писать
-      &out_path
-    ])
-    .output()
-    .expect("ffmpeg failed");
-  
-  let out = String::from_utf8(cmd.stderr).unwrap();
-
-  println!("{}", out);
+  upload_chunk("~/Documents/learn/rust/chunks/001.mp4").await
 }
 
