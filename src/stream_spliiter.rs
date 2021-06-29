@@ -16,7 +16,7 @@ pub async fn split_into_chunks() {
     cam_rtsp_port
   );
   let cwd = std::env::current_dir().unwrap();
-  let out_path = [cwd.to_str().unwrap(), "chunks", "%03d.mp4"].join("/");
+  let out_path = [cwd.to_str().unwrap(), "chunks", "%Y-%m-%dT%H:%M:%S%z.mp4"].join("/");
 
   let cmd = Command::new("ffmpeg")
     .args(&[
@@ -46,7 +46,9 @@ pub async fn split_into_chunks() {
       // Размер буффера
       "-bufsize",
       "64k",
-      // Куда писать
+      // // Куда писать
+      "-strftime",
+      "1",
       &out_path
     ])
     .stdout(Stdio::null())
